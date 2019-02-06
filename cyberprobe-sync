@@ -1,0 +1,87 @@
+#!/usr/bin/env python
+
+#
+# Script, monitors an OpenVPN IP allocation log, and updates the cyberprobe
+# configuration file with the IP addresses.
+#
+
+import sys
+import os
+import time
+import xml.dom.minidom
+import csv
+
+# Cyberprobe configuration file, hint: /etc/cyberprobe.cfg
+if len(sys.argv) > 1:
+    cyberprobe = sys.argv[1]
+else:
+    cyberprobe = "/etc/cyberprobe.cfg"
+
+# OpenVPN
+if len(sys.argv) > 2:
+    openvpn = sys.argv[2]
+else:
+    openvpn = "/etc/openvpn/clients"
+
+# Time of last update, forces immediate update.
+old = 0
+
+# Loop forever.
+while True:
+
+    # Get time of last update
+    try:
+
+        stat = os.stat(openvpn)
+        new = stat.st_mtime
+
+        # If not changed, sleep and try again
+        if new == old:
+            time.sleep(1)
+            continue
+
+        # XML parse cyberprobe file
+        try:
+            doc = xml.dom.minidom.parse(cyberprobe)
+        except:
+            continue
+
+        # Get <targets> element.
+        node = doc.documentElement.getElementsByTagName("targets")[0]
+
+        # Delete children.
+        while node.hasChildNodes():
+            node.removeChild(node.firstChild)
+
+        # Add newline after <targets>
+        node.appendChild(doc.createTextNode("\n"))
+
+        # Chomp through OpenVPN clients directory.
+        for file in os.listdir(openvpn):
+
+            with open(openvpn + "/" + file, 'r') as f:
+                ip = f.readline().rstrip()
+
+            # Indent line
+            node.appendChild(doc.createTextNode("    "))
+
+            # Add <target ...> element
+            targ = doc.createElement("target")
+            targ.setAttribute("address", ip)
+            targ.setAttribute("liid", file)
+            targ.setAttribute("network", "vpn")
+            node.appendChild(targ)
+            node.appendChild(doc.createTextNode("\n"))
+
+        # Re-indent the </targets> inline properly.
+        node.appendChild(doc.createTextNode("  "))
+
+        # Write XML back to config file.
+        open(cyberprobe, "w").write(doc.toxml())
+    
+        old = new
+
+    except Exception, e:
+        print "Exception:",e
+        time.sleep(5)
+

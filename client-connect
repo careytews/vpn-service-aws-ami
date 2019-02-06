@@ -1,0 +1,22 @@
+#!/bin/bash
+
+key=/vpn-creds/key.allocator
+cert=/vpn-creds/cert.allocator
+ca=/vpn-creds/cert.ca
+
+ip=$(wget -q -O- --private-key=$key --certificate=$cert  \
+  --ca-certificate=$ca \
+  https://addresses.ops.trustnetworks.com/get/${common_name})
+
+if [ "${ip}" == "" ]
+then
+  echo No IP address allocated.
+  exit 1
+fi
+
+echo "${ip}" > /etc/openvpn/clients/${common_name}
+chmod 644 /etc/openvpn/clients/${common_name}
+
+echo "ifconfig-push ${ip} 255.255.0.0" > $1
+
+exit 0
